@@ -4,7 +4,7 @@ It converts your sketch to a beautiful fashion photo which you can edit and then
 with the start-of-art video generation model Veo 3.
 
 ## Results:
-<img src="https://github.com/NSTiwari/Sketch2Runway/blob/main/static/sketch2runway.gif"/>
+<img src="https://github.com/NSTiwari/Sketch2Runway/blob/main/static/images/sketch2runway.gif"/>
 
 The repo includes a Flask web app and a Colab notebook: 
 * The **Flask web app** is perfect for anyone: whether you are an artist with creative flair or someone who can barely draw, 
