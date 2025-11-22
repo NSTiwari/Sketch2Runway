@@ -3,6 +3,9 @@ Sketch2Runway is a project that showcases Google's generative AI models **Gemini
 It converts your sketch to a beautiful fashion photo which you can edit and then turn it into a stunning 8-second video 
 with the start-of-art video generation model Veo 3.
 
+## Results:
+<img src="https://github.com/NSTiwari/Sketch2Runway/blob/main/static/sketch2runway.gif"/>
+
 The repo includes a Flask web app and a Colab notebook: 
 * The **Flask web app** is perfect for anyone: whether you are an artist with creative flair or someone who can barely draw, 
 try it out to see your sketch transformed to photorealistic images and then come to life with stunning runway videos.
