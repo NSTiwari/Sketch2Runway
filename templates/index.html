@@ -1,0 +1,481 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Sketch2Runway</title>
+    <style>
+        :root {
+            --bg-color-light: #ffffff;
+            --text-color-dark: #000000;
+            --border-color: #cccccc;
+            --border-color-dark: #000000;
+            --blue-btn: #0D92F4;
+            --blue-btn-hover: #77CDFF;
+            --red-btn: #C62E2E;
+            --red-btn-hover: #F95454;
+            --inactive-opacity: 0.4;
+            --inactive-scale: 0.6;
+            --transition-speed: 0.5s;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+            background-color: var(--bg-color-light);
+            color: var(--text-color-dark);
+            margin: 0;
+            padding: 10px 20px;
+            height: 100vh;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: flex-start;
+            overflow: hidden;
+            box-sizing: border-box;
+        }
+        
+        .main-container {
+            width: 100%;
+            height: 100%;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: flex-start;
+        }
+
+        .header {
+            text-align: center;
+            padding-bottom: 10px;
+            margin-bottom: 10px;
+            flex-shrink: 0;
+        }
+        .header h1 {
+            font-size: 2.2em;
+            margin: 0 0 5px 0;
+            color: #333;
+        }
+        .header .attribution {
+            font-size: 1em;
+            color: #555;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 8px;
+        }
+        .header .gde-logo {
+            height: 1.2em;
+            vertical-align: middle;
+        }
+
+        .carousel-viewport {
+            width: 100%;
+            flex-grow: 1;
+            position: relative;
+            perspective: 2500px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            min-height: 0;
+        }
+
+        .carousel-step {
+            position: absolute;
+            width: 90%;
+            max-height: 100%;
+            transition: transform var(--transition-speed) cubic-bezier(0.25, 1, 0.5, 1), 
+                        opacity var(--transition-speed) ease;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 12px;
+        }
+        
+        #step-sketch { max-width: 380px; }
+        #step-generated-image, #step-edited-image { max-width: 380px; }
+        #step-video { max-width: 650px; }
+
+        .carousel-step { transform: scale(0.3); opacity: 0; pointer-events: none; }
+        .carousel-step.active { transform: translateX(0) scale(1); opacity: 1; z-index: 10; pointer-events: auto;}
+        .carousel-step.prev { transform: translateX(-120%) scale(var(--inactive-scale)); opacity: var(--inactive-opacity); z-index: 5; pointer-events: auto; }
+        .carousel-step.next { transform: translateX(120%) scale(var(--inactive-scale)); opacity: var(--inactive-opacity); z-index: 5; pointer-events: auto; }
+        .carousel-step.hide-left { transform: translateX(-240%) scale(0); opacity: 0; }
+        .carousel-step.hide-right { transform: translateX(240%) scale(0); opacity: 0; }
+
+        .step-content {
+            width: 100%;
+            border-radius: 8px;
+            overflow: hidden;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            background-color: #f8f9fa; /* A very light grey for the background */
+            border: 2px solid var(--border-color-dark);
+            box-shadow: 0 8px 25px rgba(0, 0, 0, 0.15);
+            flex-shrink: 1;
+            min-height: 100px;
+        }
+
+        #step-sketch .step-content { background-color: var(--bg-color-light); } /* Keep sketch canvas white */
+        #step-sketch .step-content { aspect-ratio: 2 / 3; }
+        #step-video .step-content { aspect-ratio: 16 / 9; }
+        #step-generated-image .step-content,
+        #step-edited-image .step-content { aspect-ratio: 2 / 3; }
+
+        .carousel-step h2 { color: var(--text-color-dark); margin: 0; font-size: 1.5em; flex-shrink: 0; }
+
+        #step-sketch .controls-panel { display: flex; flex-wrap: wrap; justify-content: center; align-items: center; gap: 10px 15px; background-color: #f0f0f0; padding: 8px 12px; border-radius: 8px; color: var(--text-color-dark); border: 1px solid var(--border-color); flex-shrink: 0; }
+        .thickness-group { display: flex; align-items: center; gap: 5px; }
+        #step-sketch .tool-btn { padding: 5px 15px; border-radius: 6px; border: 1px solid #b0b0b0; background-color: #e5e5e5; cursor: pointer; }
+        #step-sketch .tool-btn.active-tool { border-color: var(--blue-btn); background-color: #cce7ff; font-weight: bold; }
+        #step-sketch input[type="color"] { border: 1px solid #b0b0b0; padding: 2px; }
+        #step-sketch input[type="range"] { width: 80px; }
+        
+        /* MODIFIED: Changed object-fit to 'contain' */
+        .step-content canvas, .step-content img, .step-content video { width: 100%; height: 100%; object-fit: contain; display: block; }
+        
+        .prompt-input { width: 100%; padding: 10px 15px; border-radius: 8px; border: 1px solid #aaa; background-color: var(--bg-color-light); color: var(--text-color-dark); font-size: 1em; text-align: left; box-sizing: border-box; flex-shrink: 0; }
+        .prompt-input::placeholder { color: #b0b0b0; opacity: 1; }
+
+        .button-group { display: flex; gap: 15px; flex-shrink: 0; }
+        .action-button { padding: 12px 25px; font-size: 1em; font-weight: bold; border: none; border-radius: 8px; cursor: pointer; transition: background-color 0.2s; color: #ffffff; }
+        .blue-btn { background-color: var(--blue-btn); }
+        .blue-btn:hover:not(:disabled) { background-color: var(--blue-btn-hover); }
+        .red-btn { background-color: var(--red-btn); }
+        .red-btn:hover:not(:disabled) { background-color: var(--red-btn-hover); }
+        .action-button:disabled { background-color: #9ca3af; cursor: not-allowed; }
+        
+        .placeholder { padding: 20px; text-align: center; color: #888; }
+        .loader { border: 5px solid #e5e7eb; border-top: 5px solid var(--blue-btn); border-radius: 50%; width: 60px; height: 60px; animation: spin 1s linear infinite; }
+        @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+
+        .carousel-nav-btn {
+            position: absolute;
+            top: 50%;
+            transform: translateY(-50%);
+            width: 48px;
+            height: 48px;
+            background: rgba(0, 0, 0, 0.4);
+            color: rgba(255, 255, 255, 0.9);
+            border-radius: 50%;
+            border: none;
+            font-size: 24px;
+            font-weight: bold;
+            cursor: pointer;
+            z-index: 20;
+            transition: all 0.2s ease;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+        .carousel-nav-btn:hover:not(:disabled) { background: rgba(0, 0, 0, 0.6); transform: translateY(-50%) scale(1.1); }
+        .carousel-nav-btn:disabled { opacity: 0; pointer-events: none; }
+        #prevBtn { left: 18%; }
+        #nextBtn { right: 18%; }
+    </style>
+</head>
+<body>
+    <div class="main-container">
+        <header class="header">
+            <h1>Fashion Sketch2Runway</h1>
+            <div class="attribution">
+                <span>Created by</span>
+                <img src="{{ url_for('static', filename='images/dev-logo.png') }}" alt="Google Developers logo" class="gde-logo">
+                <span>Margaret Maynard-Reid & Nitin Tiwari</span>
+            </div>
+        </header>
+
+        <div class="carousel-viewport">
+            <button id="prevBtn" class="carousel-nav-btn">
+                <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" fill="currentColor" viewBox="0 0 16 16"><path fill-rule="evenodd" d="M11.354 1.646a.5.5 0 0 1 0 .708L5.707 8l5.647 5.646a.5.5 0 0 1-.708.708l-6-6a.5.5 0 0 1 0-.708l6-6a.5.5 0 0 1 .708 0z"/></svg>
+            </button>
+            <button id="nextBtn" class="carousel-nav-btn">
+                <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" fill="currentColor" viewBox="0 0 16 16"><path fill-rule="evenodd" d="M4.646 1.646a.5.5 0 0 1 .708 0l6 6a.5.5 0 0 1 0 .708l-6 6a.5.5 0 0 1-.708-.708L10.293 8 4.646 2.354a.5.5 0 0 1 0-.708z"/></svg>
+            </button>
+
+            <div class="carousel-step" id="step-sketch" data-step="0">
+                <h2>Sketch</h2>
+                <div class="step-content"> <canvas id="sketchCanvas"></canvas> </div>
+                <div class="controls-panel">
+                    <button id="drawBtn" class="tool-btn active-tool">Draw</button>
+                    <button id="eraseBtn" class="tool-btn">Erase</button>
+                    <label for="colorPicker">Color:</label>
+                    <input type="color" id="colorPicker" value="#000000">
+                    <div class="thickness-group">
+                        <label for="thicknessSlider">Thickness:</label>
+                        <input type="range" id="thicknessSlider" min="1" max="50" value="1">
+                        <span id="thicknessValue">1</span>
+                    </div>
+                </div>
+                <input type="text" id="sketchPrompt" class="prompt-input" placeholder="e.g., A woman wearing a pink t-shirt and blue jeans">
+                <div class="button-group">
+                    <!-- MODIFIED: Button text updated -->
+                    <button id="clearSketchBtn" class="action-button red-btn">Clear All</button>
+                    <button id="generateImageBtn" class="action-button blue-btn">Generate</button>
+                </div>
+            </div>
+
+            <div class="carousel-step" id="step-generated-image" data-step="1">
+                <h2>Generated Image</h2>
+                <div id="generatedImageContainer" class="step-content"><div class="placeholder">Generated image will appear here...</div></div>
+                <input type="text" id="editPrompt" class="prompt-input" placeholder="e.g., Add a white bead necklace, change background to a beach">
+                <div class="button-group">
+                    <button id="clearEditPromptBtn" class="action-button red-btn">Clear Prompt</button>
+                    <button id="editImageBtn" class="action-button blue-btn">Edit Image</button>
+                </div>
+            </div>
+            
+            <div class="carousel-step" id="step-edited-image" data-step="2">
+                <h2>Edited Image</h2>
+                <div id="editedImageContainer" class="step-content"><div class="placeholder">Edited image will appear here...</div></div>
+                <input type="text" id="videoPrompt" class="prompt-input" placeholder="e.g., Animate with a subtle cinematic zoom">
+                <div class="button-group">
+                    <button id="clearVideoPromptBtn" class="action-button red-btn">Clear Prompt</button>
+                    <button id="generateVideoBtn" class="action-button blue-btn">Generate Video</button>
+                </div>
+            </div>
+
+            <div class="carousel-step" id="step-video" data-step="3">
+                <h2>Generated Video</h2>
+                <div id="videoContainer" class="step-content"><div class="placeholder">Final video will appear here...</div></div>
+                <div class="button-group">
+                    <button id="startOverBtn" class="action-button red-btn">Start Over</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+    document.addEventListener('DOMContentLoaded', () => {
+        let currentStep = 0;
+        let generatedImageB64 = '';
+        let editedImageB64 = '';
+        let maxReachedStep = 0;
+
+        const steps = document.querySelectorAll('.carousel-step');
+        const ui = {
+            prevBtn: document.getElementById('prevBtn'),
+            nextBtn: document.getElementById('nextBtn'),
+            sketchCanvas: document.getElementById('sketchCanvas'),
+            drawBtn: document.getElementById('drawBtn'),
+            eraseBtn: document.getElementById('eraseBtn'),
+            colorPicker: document.getElementById('colorPicker'),
+            thicknessSlider: document.getElementById('thicknessSlider'),
+            thicknessValue: document.getElementById('thicknessValue'),
+            sketchPrompt: document.getElementById('sketchPrompt'),
+            clearSketchBtn: document.getElementById('clearSketchBtn'),
+            generateImageBtn: document.getElementById('generateImageBtn'),
+            generatedImageContainer: document.getElementById('generatedImageContainer'),
+            editPrompt: document.getElementById('editPrompt'),
+            clearEditPromptBtn: document.getElementById('clearEditPromptBtn'),
+            editImageBtn: document.getElementById('editImageBtn'),
+            editedImageContainer: document.getElementById('editedImageContainer'),
+            videoPrompt: document.getElementById('videoPrompt'),
+            clearVideoPromptBtn: document.getElementById('clearVideoPromptBtn'),
+            generateVideoBtn: document.getElementById('generateVideoBtn'),
+            videoContainer: document.getElementById('videoContainer'),
+            startOverBtn: document.getElementById('startOverBtn'),
+        };
+        
+        function updateCarousel() {
+            steps.forEach(step => {
+                step.classList.remove('active', 'prev', 'next', 'hide-left', 'hide-right');
+                const stepIndex = parseInt(step.dataset.step);
+
+                if (stepIndex > maxReachedStep) {
+                    step.classList.add('hide-right');
+                    return;
+                }
+
+                if (stepIndex === currentStep) step.classList.add('active');
+                else if (stepIndex === currentStep - 1) step.classList.add('prev');
+                else if (stepIndex === currentStep + 1) step.classList.add('next');
+                else if (stepIndex < currentStep) step.classList.add('hide-left');
+                else step.classList.add('hide-right');
+            });
+
+            ui.prevBtn.disabled = currentStep === 0;
+            ui.nextBtn.disabled = currentStep >= maxReachedStep;
+        }
+
+        const goToStep = (stepIndex) => { 
+            currentStep = Math.max(0, Math.min(maxReachedStep, stepIndex)); 
+            updateCarousel(); 
+        };
+
+        ui.prevBtn.addEventListener('click', () => goToStep(currentStep - 1));
+        ui.nextBtn.addEventListener('click', () => goToStep(currentStep + 1));
+
+        const ctx = ui.sketchCanvas.getContext('2d');
+        let isDrawing = false, lastX = 0, lastY = 0;
+
+        function setCanvasSize() {
+            const container = ui.sketchCanvas.parentElement;
+            if (!container) return;
+            ui.sketchCanvas.width = container.clientWidth;
+            ui.sketchCanvas.height = container.clientHeight;
+        }
+
+        function resetCanvas() {
+            setCanvasSize();
+            ctx.fillStyle = "white";
+            ctx.fillRect(0, 0, ui.sketchCanvas.width, ui.sketchCanvas.height);
+            setDrawMode();
+        }
+
+        const setDrawMode = () => {
+            ctx.globalCompositeOperation = 'source-over';
+            ctx.strokeStyle = ui.colorPicker.value;
+            ui.drawBtn.classList.add('active-tool');
+            ui.eraseBtn.classList.remove('active-tool');
+        };
+
+        const setEraseMode = () => {
+            ctx.globalCompositeOperation = 'destination-out';
+            ui.eraseBtn.classList.add('active-tool');
+            ui.drawBtn.classList.remove('active-tool');
+        };
+
+        function getPos(e) {
+            const rect = ui.sketchCanvas.getBoundingClientRect();
+            const clientX = e.touches ? e.touches[0].clientX : e.clientX;
+            const clientY = e.touches ? e.touches[0].clientY : e.clientY;
+            return { x: clientX - rect.left, y: clientY - rect.top };
+        }
+
+        function startDrawing(e) {
+            isDrawing = true;
+            [lastX, lastY] = [getPos(e).x, getPos(e).y];
+        }
+
+        function draw(e) {
+            if (!isDrawing) return;
+            e.preventDefault();
+            const { x, y } = getPos(e);
+            ctx.beginPath();
+            ctx.moveTo(lastX, lastY);
+            ctx.lineTo(x, y);
+            ctx.lineWidth = ui.thicknessSlider.value;
+            ctx.lineCap = 'round';
+            ctx.strokeStyle = ui.colorPicker.value;
+            ctx.stroke();
+            [lastX, lastY] = [x, y];
+        }
+
+        const stopDrawing = () => { isDrawing = false; }
+
+        const showLoader = (container) => { container.innerHTML = '<div class="loader"></div>'; };
+        const showError = (container, message) => { container.innerHTML = `<div class="placeholder" style="color: var(--red-btn);">Error: ${message}</div>`; };
+        const showImage = (container, b64) => { container.innerHTML = `<img src="data:image/png;base64,${b64}" alt="Generated content">`; };
+        const showVideo = (container, url) => { container.innerHTML = `<video src="${url}" controls autoplay loop muted></video>`; };
+        
+        async function callApi(endpoint, payload, loaderContainer) {
+            showLoader(loaderContainer);
+            try {
+                const response = await fetch(endpoint, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(payload)
+                });
+                const result = await response.json();
+                if (!response.ok) throw new Error(result.error || `Server error: ${response.status}`);
+                return result;
+            } catch (error) {
+                console.error(`API Error at ${endpoint}:`, error);
+                showError(loaderContainer, error.message);
+                return null;
+            }
+        }
+
+        ['mousedown', 'touchstart'].forEach(e => ui.sketchCanvas.addEventListener(e, startDrawing, { passive: false }));
+        ['mouseup', 'mouseout', 'touchend'].forEach(e => ui.sketchCanvas.addEventListener(e, stopDrawing));
+        ui.sketchCanvas.addEventListener('mousemove', draw);
+        ui.sketchCanvas.addEventListener('touchmove', draw, { passive: false });
+        
+        ui.drawBtn.addEventListener('click', setDrawMode);
+        ui.eraseBtn.addEventListener('click', setEraseMode);
+        ui.colorPicker.addEventListener('input', () => { if(ui.drawBtn.classList.contains('active-tool')) setDrawMode()});
+        ui.thicknessSlider.addEventListener('input', (e) => ui.thicknessValue.textContent = e.target.value);
+        ui.clearSketchBtn.addEventListener('click', () => {
+            resetCanvas();
+            ui.sketchPrompt.value = '';
+        });
+
+        ui.generateImageBtn.addEventListener('click', async () => {
+            const prompt = ui.sketchPrompt.value.trim();
+            if (!prompt) { alert('Please provide a prompt.'); return; }
+            maxReachedStep = Math.max(maxReachedStep, 1);
+            goToStep(1);
+            const result = await callApi('/generate-image', { prompt, image_data: ui.sketchCanvas.toDataURL('image/png') }, ui.generatedImageContainer);
+            if (result) {
+                generatedImageB64 = result.image_base64;
+                showImage(ui.generatedImageContainer, generatedImageB64);
+                showImage(ui.editedImageContainer, generatedImageB64);
+            } else {
+                maxReachedStep = 0;
+                goToStep(0); 
+            }
+        });
+
+        ui.editImageBtn.addEventListener('click', async () => {
+            const prompt = ui.editPrompt.value.trim();
+            if (!prompt) { alert('Please provide a prompt to edit the image.'); return; }
+            maxReachedStep = Math.max(maxReachedStep, 2);
+            goToStep(2);
+            const result = await callApi('/generate-image', { prompt, image_data: `data:image/png;base64,${generatedImageB64}` }, ui.editedImageContainer);
+            if (result) {
+                editedImageB64 = result.image_base64;
+                showImage(ui.editedImageContainer, editedImageB64);
+            } else {
+                maxReachedStep = 1;
+                goToStep(1); 
+            }
+        });
+        ui.clearEditPromptBtn.addEventListener('click', () => ui.editPrompt.value = '');
+
+        ui.generateVideoBtn.addEventListener('click', async () => {
+            const prompt = ui.videoPrompt.value.trim();
+            const imageToAnimate = editedImageB64 || generatedImageB64; 
+            if (!prompt || !imageToAnimate) { alert('An image and a prompt are required to generate a video.'); return; }
+            maxReachedStep = Math.max(maxReachedStep, 3);
+            goToStep(3);
+            const result = await callApi('/generate-video', { prompt, image_data: `data:image/png;base64,${imageToAnimate}` }, ui.videoContainer);
+            if (result) {
+                showVideo(ui.videoContainer, result.generated_video_url);
+            } else {
+                maxReachedStep = 2;
+                goToStep(2);
+            }
+        });
+        ui.clearVideoPromptBtn.addEventListener('click', () => ui.videoPrompt.value = '');
+
+        // MODIFIED: clearSketchBtn now has the 'Start Over' functionality for the whole app
+        ui.clearSketchBtn.addEventListener('click', () => {
+            generatedImageB64 = '';
+            editedImageB64 = '';
+            maxReachedStep = 0;
+            resetCanvas();
+            ui.sketchPrompt.value = '';
+            ['generatedImageContainer', 'editedImageContainer', 'videoContainer'].forEach(id => {
+                document.getElementById(id).innerHTML = `<div class="placeholder">${id.replace('Container', '...')}</div>`;
+            });
+            ui.editPrompt.value = '';
+            ui.videoPrompt.value = '';
+            goToStep(0);
+        });
+
+        // The button on the last step does the same thing
+        ui.startOverBtn.addEventListener('click', () => {
+            ui.clearSketchBtn.click(); // Trigger the same logic
+        });
+
+
+        // Use a slight delay for initial canvas sizing to ensure layout is stable
+        setTimeout(() => {
+            resetCanvas();
+            window.addEventListener('resize', resetCanvas);
+            updateCarousel();
+        }, 10);
+    });
+    </script>
+</body>
+</html>
