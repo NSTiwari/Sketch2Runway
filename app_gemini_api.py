@@ -23,7 +23,6 @@ os.makedirs(LOCAL_IMAGE_DIR, exist_ok=True)
 os.makedirs(LOCAL_VIDEO_DIR, exist_ok=True)
 
 API_KEY = os.environ.get("GOOGLE_API_KEY")
-GCP_PROJECT_ID = os.environ.get("GCP_PROJECT_ID")
 MODEL_ID_IMAGE = os.environ.get("IMAGE_GEN_MODEL")  # e.g., gemini-2.5-flash-image
 MODEL_ID_VIDEO = os.environ.get("VIDEO_GEN_MODEL")  # e.g., veo-3.1-generate-preview
 
@@ -32,7 +31,7 @@ if not API_KEY:
 
 # Initialize GenAI client
 try:
-    genai_client = genai.Client(vertexai=True, project=GCP_PROJECT_ID)
+    genai_client = genai.Client(api_key=API_KEY)
     print("GenAI client initialized successfully.")
 except Exception as e:
     print(f"Failed to initialize GenAI client: {e}")
@@ -117,89 +116,57 @@ def generate_video_route():
     base64_image_data = data["image_data"]
     video_prompt = data["prompt"].strip()
 
-    temp_image_path = "temp_image.png"
-
     try:
-        # Convert base64 → PNG bytes → GenAI image
+        # Convert base64 → PNG bytes → genai image
         img_bytes = base64.b64decode(base64_image_data.split(",", 1)[1])
         pil_image = PIL.Image.open(io.BytesIO(img_bytes))
 
-        # Save image temporarily to pass it as a file for Veo 3.1 video generation
-        pil_image.save(temp_image_path)
+        buf = io.BytesIO()
+        pil_image.save(buf, format="PNG")
+        inline_png_bytes = buf.getvalue()
 
-        # -----------------------------
-        #   VIDEO GEN WITH VEO 3.1
-        # -----------------------------
-        enhance_prompt = True  # Set based on your preference
-        generate_audio = True  # Set based on your preference
+        # Convert to GenAI image part
+        image_part = types.Part(
+            inline_data=types.Blob(mime_type="image/png", data=inline_png_bytes)
+        )
+        image_for_video = image_part.as_image()
 
-        # Generate the video with Veo 3.1 using Vertex AI Client
+        # ================================
+        #     CALL VEO 3.1 PREVIEW
+        # ================================
         operation = genai_client.models.generate_videos(
             model=MODEL_ID_VIDEO,
             prompt=video_prompt,
-            image=types.Image.from_file(location=temp_image_path),
-            config=types.GenerateVideosConfig(
-                aspect_ratio="16:9",  # Adjust to your desired aspect ratio
-                number_of_videos=1,
-                duration_seconds=6,   # Adjust to your desired video duration
-                resolution="1080p",   # Adjust to your desired resolution
-                person_generation="allow_adult",  # Adjust based on your use case
-                enhance_prompt=enhance_prompt,
-                generate_audio=generate_audio,
-            ),
+            image=image_for_video,
         )
 
-        # Poll the operation to check when it's done
+        # Poll the operation
         print("Polling Veo video generation...")
         while not operation.done:
-            time.sleep(15)  # Wait for the operation to finish
+            time.sleep(10)
             operation = genai_client.operations.get(operation)
-            print(operation)  # For debugging
+            print("...still generating...")
 
-        if not operation.response or not operation.response.generated_videos:
+        if not operation.response.generated_videos:
             raise ValueError("Veo returned no videos.")
 
-        # Check for video result and display it (video_bytes or video URI)
+        # Download video to local /static folder
         video = operation.response.generated_videos[0]
-        video_url = ""
+        filename = f"video_{uuid.uuid4()}.mp4"
+        save_path = os.path.join(LOCAL_VIDEO_DIR, filename)
 
-        # --- FIX STARTS HERE ---
-        # The 'video' object is a wrapper. We must check for 'video_bytes' property inside 'video.video'
-        
-        # 1. Check if video bytes are present
-        if hasattr(video.video, "video_bytes") and video.video.video_bytes:
-            video_file_name = f"video_{uuid.uuid4()}.mp4"
-            video_path = os.path.join(LOCAL_VIDEO_DIR, video_file_name)
-            
-            with open(video_path, "wb") as out_file:
-                out_file.write(video.video.video_bytes)  # Access the actual bytes
+        genai_client.files.download(file=video.video)
+        video.video.save(save_path)
 
-            print(f"Video saved locally at {video_path}")
-            video_url = f"/static/generated_videos/{video_file_name}"
+        print(f"Video saved locally: {save_path}")
 
-        # 2. Check if video URI is present (fallback for some cloud storage configs)
-        elif hasattr(video.video, "uri") and video.video.uri:
-            video_url = video.video.uri
-            print(f"Video available at cloud URL: {video_url}")
-        
-        else:
-            raise ValueError("Video result contained neither bytes nor URI.")
-        # --- FIX ENDS HERE ---
+        public_url = f"/static/generated_videos/{filename}"
 
-        # Return the video URL to the frontend
-        return jsonify({"generated_video_url": video_url})
+        return jsonify({"generated_video_url": public_url})
 
     except Exception as e:
         print(f"Video generation error: {e}")
         return jsonify({"error": f"Failed to generate video: {e}"}), 500
-    
-    finally:
-        # Cleanup temp file
-        if os.path.exists(temp_image_path):
-            try:
-                os.remove(temp_image_path)
-            except:
-                pass
 
 
 # --------------------------------------------------------
