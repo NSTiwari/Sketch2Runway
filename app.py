@@ -4,12 +4,14 @@ import time
 import base64
 import uuid
 import PIL.Image
-from flask import Flask, render_template, request, jsonify
+from flask import Flask, render_template, request, jsonify, send_from_directory, abort
 from dotenv import load_dotenv
 
 # Google GenAI imports (new unified API)
 from google import genai
 from google.genai import types
+
+import utils
 
 # --- Configuration & Initialization ---
 load_dotenv(".env")
@@ -200,6 +202,69 @@ def generate_video_route():
                 os.remove(temp_image_path)
             except:
                 pass
+
+
+# --------------------------------------------------------
+#                    HEALTH CHECK
+# --------------------------------------------------------
+@app.route("/health")
+def health():
+    return jsonify({
+        "status": "ok",
+        "genai_client": genai_client is not None,
+        "image_model": MODEL_ID_IMAGE,
+        "video_model": MODEL_ID_VIDEO,
+    })
+
+
+# --------------------------------------------------------
+#               GENERATED FILE LISTING
+# --------------------------------------------------------
+@app.route("/history/images")
+def list_images():
+    files = utils.list_generated_files(LOCAL_IMAGE_DIR, extensions=(".png", ".jpg"))
+    return jsonify({"images": files, "count": len(files)})
+
+
+@app.route("/history/videos")
+def list_videos():
+    files = utils.list_generated_files(LOCAL_VIDEO_DIR, extensions=(".mp4",))
+    return jsonify({"videos": files, "count": len(files)})
+
+
+# --------------------------------------------------------
+#               DOWNLOAD GENERATED FILES
+# --------------------------------------------------------
+@app.route("/download/image/<filename>")
+def download_image(filename):
+    safe_dir = os.path.abspath(LOCAL_IMAGE_DIR)
+    full_path = os.path.abspath(os.path.join(safe_dir, filename))
+    if not full_path.startswith(safe_dir):
+        abort(403)
+    return send_from_directory(safe_dir, filename, as_attachment=True)
+
+
+@app.route("/download/video/<filename>")
+def download_video(filename):
+    safe_dir = os.path.abspath(LOCAL_VIDEO_DIR)
+    full_path = os.path.abspath(os.path.join(safe_dir, filename))
+    if not full_path.startswith(safe_dir):
+        abort(403)
+    return send_from_directory(safe_dir, filename, as_attachment=True)
+
+
+# --------------------------------------------------------
+#               CLEANUP OLD GENERATED FILES
+# --------------------------------------------------------
+@app.route("/admin/cleanup", methods=["POST"])
+def cleanup():
+    """Remove generated files older than 24 hours from both asset directories."""
+    removed_images = utils.cleanup_old_files(LOCAL_IMAGE_DIR)
+    removed_videos = utils.cleanup_old_files(LOCAL_VIDEO_DIR)
+    return jsonify({
+        "removed_images": removed_images,
+        "removed_videos": removed_videos,
+    })
 
 
 # --------------------------------------------------------
